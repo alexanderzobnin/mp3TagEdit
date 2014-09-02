@@ -1,6 +1,8 @@
 """
-Module for read ID3v2 tag.
+Module for read ID3v2.3 tag.
 """
+
+from id3v23frames import *
 
 
 class ID3V2Tag:
@@ -82,70 +84,6 @@ class ID3V2TagHeader:
         return size
 
 
-class ID3V2Frame:
-    """
-    ID3v2 Frame.
-    """
-    def __init__(self, frame_header, frame_body):
-        self.header = frame_header
-        self.size = self.header.framesize + 10
-        self.raw_body = frame_body
-        self.body = ID3V2Frame.decode_frame_body(frame_body)
-
-    def print(self):
-        """
-        Print frame information (for testing).
-        :return:
-        """
-        self.header.print()
-        print('Frame body:', self.body)
-        print()
-
-    @staticmethod
-    def decode_frame_body(bytestring):
-        """
-        Decode frame body in sting.
-
-        :param bytestring:
-        :return: String contained frame body.
-        """
-        # Read first byte in frame and detect encoding
-        encoding_byte = bytestring[0]
-        if encoding_byte == 0:
-            # Use ISO-8859-1
-            frame_body = bytestring[1:].decode('iso8859_1')
-        elif encoding_byte == 1:
-            # Use Unicode
-            frame_body = bytestring[1:].decode('utf_16')
-        else:
-            frame_body = bytestring.decode()
-        return frame_body
-
-
-class ID3V2FrameHeader:
-    """
-    ID3v2 Frame Header. Length - 10 bytes.
-    """
-    def __init__(self, byteheader):
-        self.frameid = byteheader[:4].decode()
-        self.flags = byteheader[8:10]
-
-        size = 0
-        framesizebytes = byteheader[4:8]
-        for i in range(0, 4):
-            sizebyte = int(framesizebytes[i]) * (256**(3-i))
-            size += sizebyte
-        self.framesize = size
-
-    def print(self):
-        print('Frame ID:', self.frameid)
-        print('Frame Size: {0} bytes'.format(self.framesize))
-        flags = ''
-        for flagbyte in self.flags:
-            flags += '{0:08b} '.format(flagbyte)
-        print('Frame flags:', flags)
-
-
 def read_id3_header(bytestring):
     """
     Read ID3v2 header from byte string.
@@ -184,8 +122,21 @@ def read_frame(bytestring, position=0):
     frame_header = read_id3_frame_header(bytestring, position)
     frame_body = bytestring[position + 10:position + 10 + frame_header.framesize]
     if frame_body:
-        frame = ID3V2Frame(frame_header, frame_body)
-        return frame
+        # Detect frame type:
+        if frame_header.frameid in FrameTypes:
+            frame_type = FrameTypes[frame_header.frameid]
+            if frame_type == 'TextInfo':
+                frame = FrameTextInfo(frame_header, frame_body)
+                return frame
+            elif frame_type == 'Comments':
+                frame = FrameComments(frame_header, frame_body)
+                return frame
+            else:
+                frame = ID3V2Frame(frame_header, frame_body)
+                return frame
+        else:
+            frame = ID3V2Frame(frame_header, frame_body)
+            return frame
     else:
         return None
 
