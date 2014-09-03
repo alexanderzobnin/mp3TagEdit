@@ -58,12 +58,32 @@ class FrameTextInfo(ID3V2Frame):
 
     def __init__(self, frame_header, frame_body):
         super().__init__(frame_header, frame_body)
-        self.text = decode_text_info(frame_body)
+        self.text = FrameTextInfo.decode_text_info(frame_body)
 
     def print(self):
         self.header.print()
         print('Frame text:', self.text)
         print()
+
+    @staticmethod
+    def decode_text_info(bytestring):
+        """
+        Decode frame body.
+
+        :param bytestring:
+        :return: String contained frame body.
+        """
+        # Read first byte in frame and detect encoding
+        encoding_byte = bytestring[0]
+        if encoding_byte == 0:
+            # Use ISO-8859-1
+            frame_body = bytestring[1:].decode('iso8859_1')
+        elif encoding_byte == 1:
+            # Use Unicode
+            frame_body = bytestring[1:].decode('utf_16')
+        else:
+            frame_body = bytestring.decode()
+        return frame_body
 
 
 class FrameComments(ID3V2Frame):
@@ -73,8 +93,8 @@ class FrameComments(ID3V2Frame):
     def __init__(self, frame_header, frame_body):
         super().__init__(frame_header, frame_body)
         self.language = frame_body[1:4].decode()
-        self.content_descr = decode_comments(frame_body[0], frame_body[4:])[0]
-        self.text = decode_comments(frame_body[0], frame_body[4:])[1]
+        self.content_descr = FrameComments.decode_comments(frame_body[0], frame_body[4:])[0]
+        self.text = FrameComments.decode_comments(frame_body[0], frame_body[4:])[1]
 
     def print(self):
         self.header.print()
@@ -83,47 +103,27 @@ class FrameComments(ID3V2Frame):
         print('text:', self.text)
         print()
 
-
-def decode_comments(encoding_byte, bytestring):
-    """
-    Decode comments and return 'short content description' and 'actual text' fields.
-    :type bytestring: bytes
-    :param encoding_byte:
-    :param bytestring:
-    """
-    # Detect encoding
-    if encoding_byte == 0:
-        # Use ISO-8859-1
-        text_len = bytestring.find(b'\x00')
-        content_descr = bytestring[:text_len].decode('iso8859_1')
-        text = bytestring[text_len+1:].decode('iso8859_1')
-        return content_descr, text
-    elif encoding_byte == 1:
-        # Use Unicode
-        text_len = bytestring.find(b'\x00\x00')
-        content_descr = bytestring[:text_len].decode('utf_16')
-        text = bytestring[text_len+2:].decode('utf_16')
-        return content_descr, text
-    else:
-        # Unknown encoding
-        return None
-
-
-def decode_text_info(bytestring):
-    """
-    Decode frame body.
-
-    :param bytestring:
-    :return: String contained frame body.
-    """
-    # Read first byte in frame and detect encoding
-    encoding_byte = bytestring[0]
-    if encoding_byte == 0:
-        # Use ISO-8859-1
-        frame_body = bytestring[1:].decode('iso8859_1')
-    elif encoding_byte == 1:
-        # Use Unicode
-        frame_body = bytestring[1:].decode('utf_16')
-    else:
-        frame_body = bytestring.decode()
-    return frame_body
+    @staticmethod
+    def decode_comments(encoding_byte, bytestring):
+        """
+        Decode comments and return 'short content description' and 'actual text' fields.
+        :type bytestring: bytes
+        :param encoding_byte:
+        :param bytestring:
+        """
+        # Detect encoding
+        if encoding_byte == 0:
+            # Use ISO-8859-1
+            text_len = bytestring.find(b'\x00')
+            content_descr = bytestring[:text_len].decode('iso8859_1')
+            text = bytestring[text_len+1:].decode('iso8859_1')
+            return content_descr, text
+        elif encoding_byte == 1:
+            # Use Unicode
+            text_len = bytestring.find(b'\x00\x00')
+            content_descr = bytestring[:text_len].decode('utf_16')
+            text = bytestring[text_len+2:].decode('utf_16')
+            return content_descr, text
+        else:
+            # Unknown encoding
+            return None
