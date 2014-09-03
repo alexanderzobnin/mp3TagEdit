@@ -14,7 +14,7 @@ class ID3V2Tag:
 
         :type tag_header: ID3V2TagHeader
         :param tag_header:
-        :type frames: list[ID3V2Frame]
+        :type frames: dict
         :param frames:
         """
         self.header = tag_header
@@ -24,7 +24,7 @@ class ID3V2Tag:
         print('-' * 30 + '\n\tTag header:\n' + '-' * 30)
         self.header.print()
         print('-' * 30 + '\n\tFrames:\n' + '-' * 30)
-        for fr in self.frames:
+        for fr in self.frames.values():
             fr.print()
 
 
@@ -84,33 +84,6 @@ class ID3V2TagHeader:
         return size
 
 
-def read_id3_header(bytestring):
-    """
-    Read ID3v2 header from byte string.
-
-    :type bytestring:
-    :param bytestring:
-    :return ID3V2Header object.
-    """
-
-    header = bytestring[:10]
-    id3header = ID3V2TagHeader(header)
-    return id3header
-
-
-def read_id3_frame_header(bytestring, position=0):
-    """
-    Read ID3v2 frame header.
-
-    :param bytestring:
-    :param position:
-    :return: ID3V2FrameHeader object
-    """
-    byteheader = bytestring[position:position+10]
-    frame_header = ID3V2FrameHeader(byteheader)
-    return frame_header
-
-
 def read_frame(bytestring, position=0):
     """
     Read ID3v2 frame into ID3V2Frame object.
@@ -119,24 +92,28 @@ def read_frame(bytestring, position=0):
     :param position:
     :return:
     """
-    frame_header = read_id3_frame_header(bytestring, position)
+    # Read ID3v2 frame header (first 10 bytes).
+    frame_header = ID3V2FrameHeader(bytestring[position:position+10])
+
+    # Read ID3v2 frame body.
     frame_body = bytestring[position + 10:position + 10 + frame_header.framesize]
+
     if frame_body:
         # Detect frame type:
-        if frame_header.frameid in FrameTypes:
-            frame_type = FrameTypes[frame_header.frameid]
-            if frame_type == 'TextInfo':
-                frame = FrameTextInfo(frame_header, frame_body)
-                return frame
-            elif frame_type == 'Comments':
-                frame = FrameComments(frame_header, frame_body)
-                return frame
-            else:
-                frame = ID3V2Frame(frame_header, frame_body)
-                return frame
+        if frame_header.frameid[0] == 'T':
+            # Text information frame
+            frame = FrameTextInfo(frame_header, frame_body)
+            return frame
+
+        elif frame_header.frameid == 'COMM':
+            # Comments frame
+            frame = FrameComments(frame_header, frame_body)
+            return frame
+
         else:
             frame = ID3V2Frame(frame_header, frame_body)
             return frame
+
     else:
         return None
 
@@ -149,8 +126,8 @@ def read_frames(bytestring):
     :return: ID3V2Tag object
     :rtype: ID3V2Tag
     """
-    # Read tag header
-    tag_header = read_id3_header(bytestring)
+    # Read tag header (first 10 bytes).
+    tag_header = ID3V2TagHeader(bytestring[:10])
 
     # Tag contains raw ID3 tag data
     tag = bytestring[:tag_header.tagsize]
@@ -158,13 +135,13 @@ def read_frames(bytestring):
     # Start read from tag body, don't read tag header
     read_position = 10
 
-    frames = []
+    frames = {}
 
     # Read, until tag end (using tagsize).
     while read_position < tag_header.tagsize:
         fr = read_frame(tag, read_position)
         if fr:
-            frames.append(fr)
+            frames[fr.id] = fr
 
             # Calculate next frame position
             read_position += fr.size

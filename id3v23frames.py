@@ -2,19 +2,6 @@
 ID3v2.3 frame types description.
 """
 
-# Frame types dictionary.
-# Format: 'Frame ID': 'Frame type'. Ex. {'TALB': 'TextInfo'}
-FrameTypes = {'UFID': 'UFID',
-              'TALB': 'TextInfo', 'TBPM': 'TextInfo',
-              'TCOM': 'TextInfo', 'TCON': 'TextInfo',
-              'TCOP': 'TextInfo', 'TENC': 'TextInfo',
-              'TIT1': 'TextInfo', 'TIT2': 'TextInfo',
-              'TIT3': 'TextInfo', 'TPE1': 'TextInfo',
-              'TPE2': 'TextInfo', 'TPE3': 'TextInfo',
-              'TPE4': 'TextInfo', 'TRCK': 'TextInfo',
-              'TYER': 'TextInfo',
-              'COMM': 'Comments'}
-
 
 class ID3V2Frame:
     """
@@ -23,6 +10,7 @@ class ID3V2Frame:
 
     def __init__(self, frame_header, frame_body):
         self.header = frame_header
+        self.id = self.header.frameid
         self.size = self.header.framesize + 10
         self.raw_body = frame_body
         #self.body = decode_frame_body(frame_body)
