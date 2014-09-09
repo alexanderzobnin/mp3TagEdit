@@ -9,6 +9,7 @@ class ID3Info:
     """
     Information about music file.
     """
+
     def __init__(self, id3tag):
         """
 
@@ -16,6 +17,7 @@ class ID3Info:
         :param id3tag: 
         :return:
         """
+
         if 'TIT2' in id3tag.frames:
             self.title = id3tag.frames['TIT2'].text
         if 'TPE1' in id3tag.frames:
@@ -23,11 +25,16 @@ class ID3Info:
         if 'TALB' in id3tag.frames:
             self.album = id3tag.frames['TALB'].text
 
+    def __str__(self):
+        return '{0} - {1} ({2})'.format(self.artist, self.title, self.album)
+
     def print(self, view='short'):
         """
         Print information about song.
+
         :param view: view mode.
         :return:
+
         """
         if view == 'verbose':
             print('Artist:', self.artist)

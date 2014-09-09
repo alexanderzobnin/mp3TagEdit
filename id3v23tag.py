@@ -9,6 +9,7 @@ class ID3V2Tag:
     """
     ID3v2 tag.
     """
+
     def __init__(self, tag_header, frames):
         """
 
@@ -17,8 +18,16 @@ class ID3V2Tag:
         :type frames: dict
         :param frames:
         """
+
         self.header = tag_header
         self.frames = frames
+
+    def __getitem__(self, item):
+        """
+
+        :rtype : ID3V2Frame
+        """
+        return self.frames[item]
 
     def print(self):
         print('-' * 30 + '\n\tTag header:\n' + '-' * 30)
@@ -32,7 +41,9 @@ class ID3V2TagHeader:
     """
     ID3v2 tag header.
     """
+
     def __init__(self, byteheader):
+        self.raw_data = byteheader
         self.id = byteheader[:3].decode()
         self.version = str(byteheader[3]) + '.' + str(byteheader[4])
 
@@ -54,8 +65,10 @@ class ID3V2TagHeader:
     def print(self):
         """
         Print tag header information (for testing).
+
         :return:
         """
+
         print('ID3v2/file Identifier:', self.id)
         print('ID3v2 Version:', self.version)
         print('ID3v2 Flags: {0:08b}'.format(self.flags))
@@ -118,7 +131,7 @@ def read_frame(bytestring, position=0):
         return None
 
 
-def read_frames(bytestring):
+def read_tag(bytestring):
     """
     Read frames from ID3v2 tag.
 
@@ -151,4 +164,22 @@ def read_frames(bytestring):
             break
 
     id3_tag = ID3V2Tag(tag_header, frames)
-    return  id3_tag
+    return id3_tag
+
+
+def write_tag(tag):
+    """
+    Write tag data into byte string
+
+    :type tag: ID3V2Tag
+    :param tag:
+    """
+
+    # Write tag header
+    bytestring = tag.header.raw_data
+
+    # Write tag frames
+    for fr in tag.frames.values():
+        bytestring = bytestring + fr.header.raw_data + fr.raw_body
+
+    return bytestring
