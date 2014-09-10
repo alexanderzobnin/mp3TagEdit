@@ -9,6 +9,10 @@ class ID3V2Frame:
     """
 
     def __init__(self, frame_header, frame_body):
+        """
+
+        :type frame_header: ID3V2FrameHeader
+        """
         self.header = frame_header
         self.id = self.header.frameid
         self.size = self.header.framesize + 10
@@ -31,6 +35,10 @@ class ID3V2FrameHeader:
     """
 
     def __init__(self, byteheader):
+        """
+
+        :type byteheader: bytes
+        """
         self.raw_data = byteheader
         self.frameid = byteheader[:4].decode()
         self.flags = byteheader[8:10]
@@ -64,8 +72,26 @@ class FrameTextInfo(ID3V2Frame):
         self.text = FrameTextInfo.decode_text_info(frame_body)
 
     def __str__(self):
-        #return self.text
-        return FrameTextInfo.decode_text_info(self.raw_body)
+        return self.text
+        #return FrameTextInfo.decode_text_info(self.raw_body)
+
+    def set_value(self, value, encoding='utf_16'):
+        # Set text value
+        self.text = value
+
+        # New raw frame body
+        new_raw_body = self.encode_text_info(value, encoding)
+        self.raw_body = new_raw_body
+
+        # Calculate new frame size
+        new_framesize = len(new_raw_body)
+        self.size = new_framesize + 10
+
+        # Write new size into frame header
+        framesizebytes = new_framesize.to_bytes(4, 'big')
+        new_raw_header = self.header.raw_data[:4] + framesizebytes + self.header.raw_data[8:10]
+        new_frame_header = ID3V2FrameHeader(new_raw_header)
+        self.header = new_frame_header
 
     def print(self):
         self.header.print()

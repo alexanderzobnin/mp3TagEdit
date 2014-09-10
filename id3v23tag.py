@@ -152,6 +152,7 @@ def read_tag(bytestring):
 
     # Read, until tag end (using tagsize).
     while read_position < tag_header.tagsize:
+        raw_frame = tag[read_position:]
         fr = read_frame(tag, read_position)
         if fr:
             frames[fr.id] = fr
