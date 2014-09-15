@@ -26,16 +26,27 @@ class ID3V2Tag:
     ID3v2 tag.
     """
 
-    def __init__(self, tag_header, frames):
+    def __init__(self, frames,
+                 tagsize=2048,
+                 unsynchronisation=False,
+                 extended_header=False,
+                 experimental_indicator=False):
         """
 
-        :type tag_header: ID3V2TagHeader
-        :param tag_header:
+
         :type frames: dict
+        :param tagsize:
+        :param unsynchronisation:
+        :param extended_header:
+        :param experimental_indicator:
         :param frames:
         """
-
-        self.header = tag_header
+        self.id = 'ID3'
+        self.version = b'\x03\x00'
+        self.tagsize = tagsize
+        self.unsynchronisation = unsynchronisation
+        self.extended_header = extended_header
+        self.experimental_indicator = experimental_indicator
         self.frames = frames
 
     def __getitem__(self, item):
@@ -47,60 +58,31 @@ class ID3V2Tag:
 
     def __str__(self):
         repr_string = ('-' * 30 + '\n\tTag header:\n' + '-' * 30 + '\n')
-        repr_string += self.header.__str__() + '\n'
+        repr_string += 'ID3v2/file Identifier: ' + self.id + '\n'
+        repr_string += 'ID3v2 Version: {0}.{1}'.format(self.version[0], self.version[1]) + '\n'
+        repr_string += 'ID3v2 size: {0} bytes'.format(self.tagsize) + '\n'
+        repr_string += 'ID3v2 Unsynchronisation: ' + self.unsynchronisation.__str__() + '\n'
+        repr_string += 'ID3v2 Extended header: ' + self.extended_header.__str__() + '\n'
+        repr_string += 'ID3v2 Experimental indicator: ' + self.experimental_indicator.__str__() + '\n'
         repr_string += ('-' * 30 + '\n\tFrames:\n' + '-' * 30 + '\n')
         for fr in self.frames.values():
             repr_string += fr.__repr__() + '\n'
         return repr_string
 
+    """
     def refresh(self):
         new_size = 0
         for fr in self.frames.values():
             new_size += fr.size
-        self.header.tagsize = new_size
+        self.tagsize = new_size
 
         # Do refresh tag header raw_data
         new_raw_header = self.header.raw_data[:6] + ID3V2TagHeader.set_tag_size(new_size)
         self.header.raw_data = new_raw_header
-
-
-class ID3V2TagHeader:
     """
-    ID3v2 tag header.
-    """
-
-    def __init__(self, byteheader):
-        self.raw_data = byteheader
-        self.id = byteheader[:3].decode()
-        self.version = str(byteheader[3]) + '.' + str(byteheader[4])
-
-        #! flags used for testing (print flag byte as is). May be deleted in future.
-        self.flags = byteheader[5]
-        self.tagsize = ID3V2TagHeader.get_tag_size(byteheader[6:])
-
-        """
-        Read flags (byte #6 after version bytes).
-        Flag structure: %abc00000 where:
-            a - Unsynchronisation
-            b - Extended header
-            c - Experimental indicator
-        """
-        self.unsynchronisation = bool(byteheader[5] & 128 == 128)
-        self.extended_header = bool(byteheader[5] & 64 == 64)
-        self.experimental_indicator = bool(byteheader[5] & 32 == 32)
-
-    def __str__(self):
-        repr_string = 'ID3v2/file Identifier:' + self.id + '\n'
-        repr_string += 'ID3v2 Version:' + self.version + '\n'
-        repr_string += 'ID3v2 Flags: {0:08b}'.format(self.flags) + '\n'
-        repr_string += 'ID3v2 size: {0} bytes'.format(self.tagsize) + '\n'
-        repr_string += 'ID3v2 Unsynchronisation:' + self.unsynchronisation.__str__() + '\n'
-        repr_string += 'ID3v2 Extended header:' + self.extended_header.__str__() + '\n'
-        repr_string += 'ID3v2 Experimental indicator:' + self.experimental_indicator.__str__() + '\n'
-        return repr_string
 
     @staticmethod
-    def get_tag_size(sizebytes):
+    def decode_tagsize(sizebytes):
         """
         Convert ID3v2 tag size to bytes.
 
@@ -113,6 +95,7 @@ class ID3V2TagHeader:
         Only 28 bits (representing up to 256MB) are used in the size description to avoid the
         introduction of 'false syncsignals'.
 
+        :rtype : int
         :param sizebytes:
         :return:
         """
@@ -124,28 +107,88 @@ class ID3V2TagHeader:
         return size
 
     @staticmethod
-    def set_tag_size(size):
+    def encode_tagsize(size):
         """
         Encode tag size and make a bytes string for use in tag header's size field.
-
-        The ID3v2 tag size is encoded with four bytes where the most significant bit (bit 7) is set to zero
-        in every byte, making a total of 28 bits. The zeroed bits are ignored, so a 257 bytes long tag is
-        represented as $00 00 02 01.
-
-        The ID3v2 tag size is the size of the complete tag after unsynchronisation, including padding,
-        excluding the header but not excluding the extended header (total tag size - 10).
-        Only 28 bits (representing up to 256MB) are used in the size description to avoid the
-        introduction of 'false syncsignals'.
 
         Tag size: 0xxxxxxx 0xxxxxxx 0xxxxxxx 0xxxxxxx
         To encode teg size take a 'size' variable and do this:
 
+        :rtype : bytes
         """
         sizebytes = []
         for i in range(0, 4):
             size_byte = (size >> 7*(3-i)) & 0x7F
             sizebytes.append(size_byte)
         return bytes(sizebytes)
+
+    @staticmethod
+    def read(bytestring):
+        """
+        Read ID3v2 tag from bytestring into ID3V2Tag object.
+
+        :type bytestring: bytes
+        :param bytestring:
+        :return: ID3V2Tag object
+        :rtype: ID3V2Tag
+        """
+
+        id3_tag = ID3V2Tag({})
+
+        # Read tag header (first 10 bytes).
+        tag_header = bytestring[:10]
+
+        # Read and verify tag ID
+        tag_id = tag_header[:3].decode()
+        if tag_id != 'ID3':
+            #! raise exception NOT_ID3_TAG
+            return None
+
+        # Read and verify version
+        major_version = tag_header[3]
+        if major_version != 3:
+            #! raise exception UNSUPPORTED_VERSION
+            return None
+        else:
+            id3_tag.version = tag_header[3:5]
+
+        """
+        Read flags (byte #6, after version bytes).
+        Flag structure: %abc00000 where:
+            a - Unsynchronisation
+            b - Extended header
+            c - Experimental indicator
+        """
+        id3_tag.unsynchronisation = bool(tag_header[5] & 0x80 != 0)
+        id3_tag.extended_header = bool(tag_header[5] & 0x40 != 0)
+        id3_tag.experimental_indicator = bool(tag_header[5] & 0x20 != 0)
+
+        #id3_tag.tagsize = ID3V2TagHeader.get_tag_size(tag_header[6:])
+        id3_tag.tagsize = ID3V2Tag.decode_tagsize(tag_header[6:])
+
+        # Tag contains raw ID3 tag data
+        tag = bytestring[:id3_tag.tagsize + 10]
+
+        # Start read from tag body, don't read tag header
+        read_position = 10
+
+        frames = {}
+
+        # Read, until tag end (using tagsize).
+        while read_position < id3_tag.tagsize + 10:
+            fr = read_frame(tag, read_position)
+            if fr:
+                frames[fr.id] = fr
+
+                # Calculate next frame position
+                read_position += fr.size
+
+            # If frame object fr is empty stop reading
+            else:
+                break
+
+        id3_tag.frames = frames
+        return id3_tag
 
 
 class ID3V2Frame:
@@ -168,7 +211,11 @@ class ID3V2Frame:
         repr_string = self.header + '\n'
         repr_string += 'Frame raw body: ' + self.raw_body + '\n'
         return repr_string
-    
+
+    @staticmethod
+    def read(bytestring):
+        pass
+
     @abstractmethod
     def set_value(self, value):
         pass
@@ -196,7 +243,7 @@ class ID3V2FrameHeader:
         self.framesize = size
 
     def __repr__(self):
-        repr_string = 'Frame ID:' + self.frameid + '\n'
+        repr_string = 'Frame ID: ' + self.frameid + '\n'
         repr_string += 'Frame Size: {0} bytes'.format(self.framesize)
         if self.flags != b'\x00\x00':
             flags = ''
@@ -220,7 +267,7 @@ class FrameTextInfo(ID3V2Frame):
 
     def __repr__(self):
         repr_str = self.header.__repr__() + '\n'
-        repr_str += 'Frame text:' + self.text + '\n'
+        repr_str += 'Frame text: ' + self.text + '\n'
         return repr_str
 
     def set_value(self, value, encoding='utf_16'):
@@ -371,42 +418,6 @@ def read_frame(bytestring, position=0):
 
     else:
         return None
-
-
-def read_tag(bytestring):
-    """
-    Read frames from ID3v2 tag.
-
-    :param bytestring:
-    :return: ID3V2Tag object
-    :rtype: ID3V2Tag
-    """
-    # Read tag header (first 10 bytes).
-    tag_header = ID3V2TagHeader(bytestring[:10])
-
-    # Tag contains raw ID3 tag data
-    tag = bytestring[:tag_header.tagsize + 10]
-
-    # Start read from tag body, don't read tag header
-    read_position = 10
-
-    frames = {}
-
-    # Read, until tag end (using tagsize).
-    while read_position < tag_header.tagsize + 10:
-        fr = read_frame(tag, read_position)
-        if fr:
-            frames[fr.id] = fr
-
-            # Calculate next frame position
-            read_position += fr.size
-
-        # If frame object fr is empty stop reading
-        else:
-            break
-
-    id3_tag = ID3V2Tag(tag_header, frames)
-    return id3_tag
 
 
 def write_tag(tag):
