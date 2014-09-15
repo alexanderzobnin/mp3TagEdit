@@ -176,12 +176,14 @@ class ID3V2Tag:
 
         # Read, until tag end (using tagsize).
         while read_position < id3_tag.tagsize + 10:
-            fr = read_frame(tag, read_position)
+            #fr = read_frame(tag, read_position)
+            bytesframe = tag[read_position:]
+            fr = ID3V2Frame.read(bytesframe)
             if fr:
                 frames[fr.id] = fr
 
                 # Calculate next frame position
-                read_position += fr.size
+                read_position += fr.size + 10
 
             # If frame object fr is empty stop reading
             else:
@@ -196,25 +198,52 @@ class ID3V2Frame:
     Base ID3v2 frame object.
     """
 
-    def __init__(self, frame_header, frame_body):
-        """
+    def __init__(self, frame_id='WNUL', frame_body=b'\x20', flags=b'\x00\x00'):
+        self.id = frame_id
+        self.flags = flags
+        self.data = frame_body
 
-        :type frame_header: ID3V2FrameHeader
-        """
-        self.header = frame_header
-        self.id = self.header.frameid
-        self.size = self.header.framesize + 10
-        self.raw_body = frame_body
-        #self.body = decode_frame_body(frame_body)
+        # Total size of frame
+        self.size = len(frame_body)
 
     def __str__(self):
-        repr_string = self.header + '\n'
-        repr_string += 'Frame raw body: ' + self.raw_body + '\n'
+        repr_string = 'Frame ID: ' + self.id + '\n'
+        repr_string += 'Frame Size: {0} bytes'.format(self.size)
+        return repr_string
+
+    def __repr__(self):
+        repr_string = 'Frame ID: ' + self.id + '\n'
+        repr_string += 'Frame Size: {0} bytes'.format(self.size)
+        if self.flags != b'\x00\x00':
+            flags = ''
+            for flagbyte in self.flags:
+                flags += '{0:08b} '.format(flagbyte)
+            repr_string += 'Frame flags: ' + flags + '\n'
         return repr_string
 
     @staticmethod
     def read(bytestring):
-        pass
+        """
+
+        """
+
+        # Read ID3v2 frame header (first 10 bytes).
+        frame_header = ID3V2FrameHeader.read(bytestring)
+
+        # Detect frame type:
+        if frame_header.frameid[0] == 'T':
+            # Text information frame
+            frame = FrameTextInfo.read(bytestring)
+
+        elif frame_header.frameid == 'COMM':
+            # Comments frame
+            frame = FrameComments.read(bytestring)
+
+        else:
+            #frame = ID3V2Frame(frame_header, frame_body)
+            frame = None
+
+        return frame
 
     @abstractmethod
     def set_value(self, value):
@@ -226,21 +255,13 @@ class ID3V2FrameHeader:
     ID3v2 Frame Header. Length - 10 bytes.
     """
 
-    def __init__(self, byteheader):
+    def __init__(self, frame_id='WNUL', frame_size=1, flags=b'\x00\x00'):
         """
 
-        :type byteheader: bytes
         """
-        self.raw_data = byteheader
-        self.frameid = byteheader[:4].decode()
-        self.flags = byteheader[8:10]
-
-        size = 0
-        framesizebytes = byteheader[4:8]
-        for i in range(0, 4):
-            sizebyte = int(framesizebytes[i]) * (256**(3-i))
-            size += sizebyte
-        self.framesize = size
+        self.frameid = frame_id
+        self.framesize = frame_size
+        self.flags = flags
 
     def __repr__(self):
         repr_string = 'Frame ID: ' + self.frameid + '\n'
@@ -252,23 +273,54 @@ class ID3V2FrameHeader:
             repr_string += 'Frame flags: ' + flags + '\n'
         return repr_string
 
+    @staticmethod
+    def read(bytestring):
+        """
+
+        """
+
+        frame_header = ID3V2FrameHeader()
+        byteheader = bytestring[:10]
+        if len(byteheader) == 10:
+            frame_header.frameid = byteheader[:4].decode()
+            frame_header.flags = byteheader[8:10]
+
+            size = 0
+            framesizebytes = byteheader[4:8]
+            for i in range(0, 4):
+                sizebyte = int(framesizebytes[i]) * (256**(3-i))
+                size += sizebyte
+            frame_header.framesize = size
+
+        else:
+            return None
+
+        return frame_header
+
 
 class FrameTextInfo(ID3V2Frame):
     """
     Text info frame.
     """
 
-    def __init__(self, frame_header, frame_body):
-        super().__init__(frame_header, frame_body)
-        self.text = FrameTextInfo.decode_text_info(frame_body)
+    def __init__(self, frame_id='WTXT', text='', encoding='unicode', flags=b'\x00\x00'):
+        super().__init__(frame_id=frame_id, flags=flags)
+        self.text = text
+        self.encoding = encoding
 
     def __str__(self):
         return self.text
 
     def __repr__(self):
-        repr_str = self.header.__repr__() + '\n'
-        repr_str += 'Frame text: ' + self.text + '\n'
-        return repr_str
+        repr_string = 'Frame ID: ' + self.id + '\n'
+        repr_string += 'Frame Size: {0} bytes\n'.format(self.size)
+        if self.flags != b'\x00\x00':
+            flags = ''
+            for flagbyte in self.flags:
+                flags += '{0:08b} '.format(flagbyte)
+            repr_string += 'Frame flags: ' + flags + '\n'
+        repr_string += 'Frame text: ' + self.text + '\n'
+        return repr_string
 
     def set_value(self, value, encoding='utf_16'):
         # Set text value
@@ -289,25 +341,36 @@ class FrameTextInfo(ID3V2Frame):
         self.header = new_frame_header
 
     @staticmethod
-    def decode_text_info(bytestring):
+    def read(bytestring):
         """
-        Decode frame body.
 
+
+        :rtype : FrameTextInfo
         :param bytestring:
-        :return: String contained frame body.
+        :return:
         """
+        frame = FrameTextInfo()
 
-        # Read first byte in frame and detect encoding
-        encoding_byte = bytestring[0]
+        # Read frame header
+        frame_header = ID3V2FrameHeader.read(bytestring)
+        frame.id = frame_header.frameid
+        frame.flags = frame_header.flags
+        frame.size = frame_header.framesize
+
+        # Read first byte in frame body and detect encoding
+        frame_body = bytestring[10:10 + frame.size]
+        encoding_byte = frame_body[0]
         if encoding_byte == 0:
             # Use ISO-8859-1
-            frame_body = bytestring[1:].decode('iso8859_1')
+            frame.text = frame_body[1:].decode('iso8859_1')
+            frame.encoding = 'iso8859_1'
         elif encoding_byte == 1:
             # Use Unicode
-            frame_body = bytestring[1:].decode('utf_16')
+            frame.text = frame_body[1:].decode('utf_16')
+            frame.encoding = 'unicode'
         else:
-            frame_body = bytestring.decode()
-        return frame_body
+            frame.text = frame_body.decode()
+        return frame
 
     @staticmethod
     def encode_text_info(text, encoding='utf_16'):
@@ -333,24 +396,68 @@ class FrameComments(ID3V2Frame):
     Comments frame.
     """
 
-    def __init__(self, frame_header, frame_body):
-        super().__init__(frame_header, frame_body)
-        self.language = frame_body[1:4].decode()
-        self.content_descr = FrameComments.decode_comments(frame_body[0], frame_body[4:])[0]
-        self.text = FrameComments.decode_comments(frame_body[0], frame_body[4:])[1]
+    def __init__(self, frame_id='WTXT', text='', language='', content_descr='', flags=b'\x00\x00'):
+        super().__init__(frame_id=frame_id, flags=flags)
+        self.text = text
+        self.language = language
+        self.content_descr = content_descr
 
     def __str__(self):
         return self.text
 
     def __repr__(self):
-        repr_string = self.header.__repr__() + '\n'
-        repr_string += 'language:' + self.language + '\n'
-        repr_string += 'content_descr:' + self.content_descr + '\n'
-        repr_string += 'text:' + self.text + '\n'
+        repr_string = 'Frame ID: ' + self.id + '\n'
+        repr_string += 'Frame Size: {0} bytes\n'.format(self.size)
+        if self.flags != b'\x00\x00':
+            flags = ''
+            for flagbyte in self.flags:
+                flags += '{0:08b} '.format(flagbyte)
+            repr_string += 'Frame flags: ' + flags + '\n'
+        repr_string += 'language: ' + self.language + '\n'
+        repr_string += 'content_descr: ' + self.content_descr + '\n'
+        repr_string += 'text: ' + self.text + '\n'
         return repr_string
 
     def set_value(self, value):
         pass
+
+    @staticmethod
+    def read(bytestring):
+        """
+
+
+        :rtype : FrameTextInfo
+        :param bytestring:
+        :return:
+        """
+        frame = FrameComments()
+
+        # Read frame header
+        frame_header = ID3V2FrameHeader.read(bytestring)
+        frame.id = frame_header.frameid
+        frame.flags = frame_header.flags
+        frame.size = frame_header.framesize
+
+        # Detect encoding
+        frame_body = bytestring[10:frame.size + 10]
+        encoding_byte = frame_body[0]
+        if encoding_byte == 0:
+            # Use ISO-8859-1
+            text_len = frame_body.find(b'\x00')
+            frame.content_descr = frame_body[:text_len].decode('iso8859_1')
+            frame.text = frame_body[text_len+1:].decode('iso8859_1')
+
+        elif encoding_byte == 1:
+            # Use Unicode
+            text_len = frame_body.find(b'\x00\x00')
+            frame.content_descr = frame_body[:text_len].decode('utf_16')
+            frame.text = frame_body[text_len+2:].decode('utf_16')
+
+        else:
+            # Unknown encoding
+            return None
+
+        return frame
 
     @staticmethod
     def decode_comments(encoding_byte, bytestring):
