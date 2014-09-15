@@ -355,19 +355,14 @@ class FrameTextInfo(ID3V2Frame):
         repr_string += 'Frame text: ' + self.text + '\n'
         return repr_string
 
-    def set_value(self, value, encoding=''):
+    def set_value(self, value):
         # Set text value
         """
 
         :type value: str
         :param value:
-        :param encoding:
         """
         self.text = value
-
-        # Set encoding
-        if encoding:
-            self.encoding = encoding
 
         # Calculate new frame size
         self.size = len(self.text.encode(self.encoding)) + 1
