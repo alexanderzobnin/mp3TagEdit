@@ -75,18 +75,6 @@ class ID3V2Tag:
             repr_string += '{0}: {1}\n'.format(fr.id, fr.__str__())
         return repr_string
 
-    """
-    def refresh(self):
-        new_size = 0
-        for fr in self.frames.values():
-            new_size += fr.size
-        self.tagsize = new_size
-
-        # Do refresh tag header raw_data
-        new_raw_header = self.header.raw_data[:6] + ID3V2TagHeader.set_tag_size(new_size)
-        self.header.raw_data = new_raw_header
-    """
-
     @staticmethod
     def decode_tagsize(sizebytes):
         """
@@ -367,23 +355,22 @@ class FrameTextInfo(ID3V2Frame):
         repr_string += 'Frame text: ' + self.text + '\n'
         return repr_string
 
-    def set_value(self, value, encoding='utf_16'):
+    def set_value(self, value, encoding=''):
         # Set text value
+        """
+
+        :type value: str
+        :param value:
+        :param encoding:
+        """
         self.text = value
 
-        # New raw frame body
-        new_raw_body = self.encode_text_info(value, encoding)
-        self.raw_body = new_raw_body
+        # Set encoding
+        if encoding:
+            self.encoding = encoding
 
         # Calculate new frame size
-        new_framesize = len(new_raw_body)
-        self.size = new_framesize + 10
-
-        # Write new size into frame header
-        framesizebytes = new_framesize.to_bytes(4, 'big')
-        new_raw_header = self.header.raw_data[:4] + framesizebytes + self.header.raw_data[8:10]
-        new_frame_header = ID3V2FrameHeader(new_raw_header)
-        self.header = new_frame_header
+        self.size = len(self.text.encode(self.encoding)) + 1
 
     @staticmethod
     def read(bytestring):
@@ -438,24 +425,6 @@ class FrameTextInfo(ID3V2Frame):
             raw_frame += b'\x01' + self.text.encode('utf_16')
 
         return raw_frame
-
-    @staticmethod
-    def encode_text_info(text, encoding='utf_16'):
-        """
-        Encode text to frame body.
-
-        :type text: str
-        :param text:
-        :param encoding:
-        :rtype: bytes
-        :return: byte string with encoded text
-        """
-        if encoding == 'iso8859_1':
-            bytestring = b'\x00' + text.encode('iso8859_1')
-            return bytestring
-        if encoding == 'utf_16':
-            bytestring = b'\x01' + text.encode('utf_16')
-            return bytestring
 
 
 class FrameComments(ID3V2Frame):
@@ -558,24 +527,3 @@ class FrameComments(ID3V2Frame):
             raw_frame += self.text.encode('utf_16')
 
         return raw_frame
-
-
-def write_tag(tag):
-    """
-    Write tag data into byte string
-
-    :type tag: ID3V2Tag
-    :param tag:
-    """
-
-    # Refresh tag before writing
-    tag.refresh()
-
-    # Write tag header
-    bytestring = tag.header.raw_data
-
-    # Write tag frames
-    for fr in tag.frames.values():
-        bytestring = bytestring + fr.header.raw_data + fr.raw_body
-
-    return bytestring
