@@ -10,37 +10,33 @@ class ID3Info:
     Information about music file.
     """
 
-    def __init__(self, id3tag):
+    def __init__(self, title='', artist='', album=''):
+        """
+
+        :return:
+        """
+        self.title = title
+        self.artist = artist
+        self.album = album
+
+    def __str__(self):
+        return '{artist} - {title} ({album})'.format(**self.__dict__)
+
+    def __repr__(self):
+        return 'Artist: {artist}\nTitle: {title}\nAlbum: {album}'.format(**self.__dict__)
+
+    @staticmethod
+    def read(id3tag):
         """
 
         :type id3tag: id3v23tag.ID3V2Tag
-        :param id3tag: 
+        :param id3tag:
         :return:
         """
-
+        id3_info = ID3Info()
         if 'TIT2' in id3tag.frames:
-            self.title = id3tag.frames['TIT2'].text
+            id3_info.title = id3tag.frames['TIT2'].text
         if 'TPE1' in id3tag.frames:
-            self.artist = id3tag.frames['TPE1'].text
+            id3_info.artist = id3tag.frames['TPE1'].text
         if 'TALB' in id3tag.frames:
-            self.album = id3tag.frames['TALB'].text
-
-    def __str__(self):
-        return '{0} - {1} ({2})'.format(self.artist, self.title, self.album)
-
-    def print(self, view='short'):
-        """
-        Print information about song.
-
-        :param view: view mode.
-        :return:
-
-        """
-        if view == 'verbose':
-            print('Artist:', self.artist)
-            print('Title:', self.title)
-            print('Album:', self.album)
-
-        # Artist - Title (Album)
-        if view == 'short':
-            print('{0} - {1} ({2})'.format(self.artist, self.title, self.album))
+            id3_info.album = id3tag.frames['TALB'].text
